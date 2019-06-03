@@ -1,6 +1,6 @@
 # Start
 I play the game alone so there are only a few write-ups about easy pwn challenge 
-You can find the binary  [here][3]
+You can find the binary [here][3]
 
 # overfloat
 emm , It is a easy chanllenge ,but you should know every part of float(Sign,Exponent,Mantissa)
